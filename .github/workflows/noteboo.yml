@@ -1,22 +1,26 @@
 name: nbdiff-web-exporter
-on: [pull_request]
+on:
+  pull_request:
 
 jobs:
   diff-action-test:
     runs-on: ubuntu-latest
-    name: diff notebooks
+    name: Diff Notebooks
     steps:
-      - name: Checkout
+      - name: Checkout Repository
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0
-      - name: diff notebooks
-        uses: kuromt/diff-notebooks
+          fetch-depth: 0  # Fetch all history for all branches and tags
+
+      - name: Diff Notebooks
+        uses: kuromt/diff-notebooks@v1  # Specify version of the action for stability
         id: nbdiff-web-exporter-action
         with:
           remote: "origin/diff-notebooks"
-          export_dir: "./artifacts"
-      - uses: actions/upload-artifact@v2
+          export_dir: "./artifacts"  # Directory for exported diff notebooks
+
+      - name: Upload Diff Artifacts
+        uses: actions/upload-artifact@v3  # Use the latest version of upload-artifact
         with:
           name: diff-notebooks
-          path: ${{steps.nbdiff-web-exporter-action.outputs.export_dir}}
+          path: ${{ steps.nbdiff-web-exporter-action.outputs.export_dir }}
