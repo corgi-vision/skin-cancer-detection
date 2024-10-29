@@ -10,7 +10,7 @@
 
 ### Kaggle ISIC 2024 challange 
 
-In this project, we will develop image-based algorithms to identify histologically confirmed skin cancer cases with single-lesion crops from 3D total body photos (TBP). The image quality resembles close-up smartphone photos, which are regularly submitted for telehealth purposes. The dataset consists of images and among their corresponding labels (positive or negative), various metadata about the patient and the leisure. From this metadata we selected the features that might be useful in machine learning applications. They are listed in [info.md](info.md)
+In this project, we will develop image-based algorithms to identify histologically confirmed skin cancer cases with single-lesion crops from 3D total body photos (TBP). The image quality resembles close-up smartphone photos, which are regularly submitted for telehealth purposes. The dataset consists of 401059 images and among their corresponding labels (positive or negative), various metadata about the patient and the leisure. We've narrowed down the features to the ones that should be useful in machine learning applications. They are listed in [info.md](info.md)
 
 ### Data preparation
 
