@@ -1,0 +1,5 @@
+[default]
+entity = corgi-vision
+project = skin-cancer-detection
+base_url = https://api.wandb.ai
+
