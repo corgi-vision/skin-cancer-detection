@@ -7,6 +7,7 @@ that was developed in the explore.ipynb notebook.
 from __future__ import annotations
 
 import logging
+import math
 from pathlib import Path
 from typing import Any
 
@@ -17,11 +18,83 @@ from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder, StandardScaler
+from sklearn.utils import shuffle
+from tensorflow.keras.utils import PyDataset
 
 logger = logging.getLogger()
-DATASET_HOME = Path.cwd() /  "data"
+logger.setLevel("DEBUG")
+
+DATASET_HOME = Path.cwd().parent /  "data"
 TRAIN_IMAGES_PATH = DATASET_HOME / "train-image" / "image"
 METADATA_PATH = DATASET_HOME / "train-metadata.csv"
+
+MOST_COMMON_SHAPE = (133,133)
+
+
+class SkinCancerDataset(PyDataset):
+    """Generator for dynamically loading the dataset"""
+
+    def __init__(self, x_set, y_set, batch_size, **kwargs):
+        super().__init__(**kwargs)
+        self.x = x_set
+        self.y = y_set
+        self.batch_size = batch_size
+        self.class_weights = self.calculate_class_weights()
+        self.weight_mapper = self.create_weight_mapper()
+
+    def calculate_class_weights(self) -> dict[int,int]:
+        """Create a dictionary for the class weights"""
+        half_count = len(self.y) / 2
+        positive_samples = self.y.sum()
+        negative_samples = len(self.y) - positive_samples
+        return {
+            0: half_count / negative_samples,
+            1: half_count / positive_samples
+        }
+    
+    def create_weight_mapper(self) -> np.ndarray:
+        """Create a mapper that returns the weight corresponding to the given label"""
+        return np.vectorize(self.class_weights.get, otypes=[float])
+
+    def __len__(self) -> int:
+        # Number of batches
+        return math.ceil(len(self.y) / self.batch_size)
+
+    def _load_image_batch(self, batch: list[str]) -> np.ndarray:
+        X = []
+        for filename in batch:
+            image = Image.open(filename).resize(MOST_COMMON_SHAPE)
+            np_scaled = np.array(image) / 255
+            X.append(np_scaled)
+            image.close()
+        return np.array(X)
+
+    def __getitem__(self, idx: int) -> np.ndarray:
+        start_idx = self.batch_size * idx
+        end_idx = min(self.batch_size + start_idx, len(self.x))
+
+        batch_x = self.x[start_idx:end_idx]
+        batch_y = self.y[start_idx:end_idx]
+
+        X = self._load_image_batch(batch_x)
+        return X, batch_y, self.weight_mapper(batch_y)
+        
+
+
+def create_dataset(metadata, batch_size:int=50) -> SkinCancerDataset:
+    """Creates a SkinCancerDataset from the given metadata
+    
+    Args:
+        metadata (pd.DataFrame): Corresponding metadata for the images to be loaded
+
+    Returns:
+        SkinCancerDataset: A dataset generator for the images in the metadata
+    """
+    filenames = [str(TRAIN_IMAGES_PATH / (id + ".jpg")) for id in metadata["isic_id"]]
+    labels = metadata["target"].to_numpy()
+
+    filenames, labels = shuffle(filenames, labels)
+    return SkinCancerDataset(filenames, labels, batch_size)
 
 
 def load_prepared_datasets(load_size:float=1) -> tuple[Any]:
@@ -41,16 +114,14 @@ def load_prepared_datasets(load_size:float=1) -> tuple[Any]:
             - pipeline (Pipeline): Preprocessing pipeline for transforming the metadata.
 
     """
-    metadata = _load_metadata()
+    metadata = load_metadata()
     X, Y, metadata = _load_images(metadata, load_size=load_size)
-
-    X_scaled = _rescale_images(X)
     metadata, pipeline = _preprocess_metadata(metadata)
 
-    return X_scaled, metadata, Y, pipeline
+    return X, metadata, Y, pipeline
 
 
-def _load_metadata() -> pd.DataFrame:
+def load_metadata() -> pd.DataFrame:
     metadata = pd.read_csv(METADATA_PATH)
     return metadata[
         [
@@ -88,7 +159,14 @@ def _load_images(metadata:pd.DataFrame, load_size:float=1) -> tuple[Any]:
         file_path = TRAIN_IMAGES_PATH / f"{filename}.jpg"
 
         if file_path.exists():
-            X.append(Image.open(file_path))
+            image = Image.open(file_path)
+            image.thumbnail(MOST_COMMON_SHAPE)
+            # image.load()
+            np_image = np.array(image) / 255
+            print(np_image.dtype)
+            X.append(np_image)
+            image.close()
+            del image
         else:
             missing_ids.append(index)
             logger.warning("File %s.jpg does not exist.", filename)
@@ -100,26 +178,6 @@ def _load_images(metadata:pd.DataFrame, load_size:float=1) -> tuple[Any]:
     logger.info(value_counts)
 
     return X, Y, metadata
-
-
-def _rescale_images(X:list) -> np.ndarray:
-    sizes = [im.size for im in X]
-    not_square = list(filter(lambda s: s[0] != s[1] ,sizes))
-    logger.warning("%s images are not n by n.", len(not_square))
-
-    values, counts = np.unique(sizes, return_counts=True)
-    most_frequent = values[np.argmax(counts)]
-    logger.info("Most frequent size: %s", most_frequent)
-
-    resized_images = []
-    for im in X:
-        scaled = im.resize([most_frequent, most_frequent])
-        resized_images.append(scaled)
-        im.close()
-    X.clear()
-
-    # Mapping to a np array and scaling the images to the [0,1] interval
-    return np.array(resized_images) / 255
 
 
 def _preprocess_metadata(metadata:pd.DataFrame) -> tuple[Any]:
