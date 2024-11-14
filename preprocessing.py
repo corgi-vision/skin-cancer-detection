@@ -24,7 +24,7 @@ from tensorflow.keras.utils import PyDataset
 logger = logging.getLogger()
 logger.setLevel("DEBUG")
 
-DATASET_HOME = Path.cwd().parent /  "data"
+DATASET_HOME = Path.cwd() /  "data"
 TRAIN_IMAGES_PATH = DATASET_HOME / "train-image" / "image"
 METADATA_PATH = DATASET_HOME / "train-metadata.csv"
 
@@ -122,7 +122,8 @@ def load_prepared_datasets(load_size:float=1) -> tuple[Any]:
 
 
 def load_metadata() -> pd.DataFrame:
-    metadata = pd.read_csv(METADATA_PATH)
+    """Load metadata from csv and select relevant columns"""
+    metadata = pd.read_csv(METADATA_PATH, dtype={"target": "int8", "age_approx": "int8"})
     return metadata[
         [
             "isic_id",
@@ -146,6 +147,17 @@ def load_metadata() -> pd.DataFrame:
     ]
 
 
+def upsample_metadata(metadata: pd.DataFrame, upsample_factor: int) -> pd.DataFrame:
+    """Upsample the positive samples in the metadata by the upsample_factor"""
+    metadata["upsampled"] = 0
+    positive_samples = metadata[metadata["target"] == 1]
+    positive_samples["upsamples"] = 1
+    for i in range(upsample_factor):
+        metadata = pd.concat([metadata, positive_samples])
+    return metadata
+
+
+
 def _load_images(metadata:pd.DataFrame, load_size:float=1) -> tuple[Any]:
     load_count = int(metadata.shape[0] * load_size)
     logger.info("Number of images to be loaded: %s", load_count)
@@ -161,9 +173,7 @@ def _load_images(metadata:pd.DataFrame, load_size:float=1) -> tuple[Any]:
         if file_path.exists():
             image = Image.open(file_path)
             image.thumbnail(MOST_COMMON_SHAPE)
-            # image.load()
             np_image = np.array(image) / 255
-            print(np_image.dtype)
             X.append(np_image)
             image.close()
             del image
