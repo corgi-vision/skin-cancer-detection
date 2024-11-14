@@ -8,12 +8,14 @@ from __future__ import annotations
 
 import logging
 import math
+import random
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pandas as pd
 from PIL import Image
+from PIL import ImageOps
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
@@ -24,20 +26,27 @@ from tensorflow.keras.utils import PyDataset
 logger = logging.getLogger()
 logger.setLevel("DEBUG")
 
-DATASET_HOME = Path.cwd() /  "data"
+DATASET_HOME = Path.cwd().parent /  "data"
 TRAIN_IMAGES_PATH = DATASET_HOME / "train-image" / "image"
 METADATA_PATH = DATASET_HOME / "train-metadata.csv"
 
 MOST_COMMON_SHAPE = (133,133)
 
+# List of functions to augment images
+image_augmenters = [
+    ImageOps.flip,
+    ImageOps.mirror,
+    lambda image: image.crop((10, 10,123,123)).resize(MOST_COMMON_SHAPE)
+]
+
 
 class SkinCancerDataset(PyDataset):
     """Generator for dynamically loading the dataset"""
 
-    def __init__(self, x_set, y_set, batch_size, **kwargs):
+    def __init__(self, file_info: dict, labels:int, batch_size:int, **kwargs):
         super().__init__(**kwargs)
-        self.x = x_set
-        self.y = y_set
+        self.x = file_info
+        self.y = labels
         self.batch_size = batch_size
         self.class_weights = self.calculate_class_weights()
         self.weight_mapper = self.create_weight_mapper()
@@ -62,12 +71,24 @@ class SkinCancerDataset(PyDataset):
 
     def _load_image_batch(self, batch: list[str]) -> np.ndarray:
         X = []
-        for filename in batch:
-            image = Image.open(filename).resize(MOST_COMMON_SHAPE)
+        for file_info in batch:
+            path = file_info["filepath"]
+            upsampled = file_info["upsampled"]
+            image = Image.open(path).resize(MOST_COMMON_SHAPE)
+            if upsampled:
+                image = self._augment_image(image)
             np_scaled = np.array(image) / 255
             X.append(np_scaled)
             image.close()
         return np.array(X)
+    
+    def _augment_image(self, image: Image):
+        """Applies either one or two transformations from image_augmenters"""
+        nb_transforms = random.randint(1,2)
+        rand_indices = random.sample(range(0, len(image_augmenters) - 1), nb_transforms)
+        for idx in rand_indices:
+            image = image_augmenters[idx](image)
+        return image
 
     def __getitem__(self, idx: int) -> np.ndarray:
         start_idx = self.batch_size * idx
@@ -90,11 +111,13 @@ def create_dataset(metadata, batch_size:int=50) -> SkinCancerDataset:
     Returns:
         SkinCancerDataset: A dataset generator for the images in the metadata
     """
-    filenames = [str(TRAIN_IMAGES_PATH / (id + ".jpg")) for id in metadata["isic_id"]]
+    # Extend the id to the complete path
+    metadata["filepath"] = metadata["isic_id"].apply(lambda id: str(TRAIN_IMAGES_PATH / (id + ".jpg")))
+    file_info = metadata[["filepath", "upsampled"]].to_dict(orient="records")
     labels = metadata["target"].to_numpy()
 
-    filenames, labels = shuffle(filenames, labels)
-    return SkinCancerDataset(filenames, labels, batch_size)
+    file_info, labels = shuffle(file_info, labels)
+    return SkinCancerDataset(file_info, labels, batch_size)
 
 
 def load_prepared_datasets(load_size:float=1) -> tuple[Any]:
@@ -123,7 +146,7 @@ def load_prepared_datasets(load_size:float=1) -> tuple[Any]:
 
 def load_metadata() -> pd.DataFrame:
     """Load metadata from csv and select relevant columns"""
-    metadata = pd.read_csv(METADATA_PATH, dtype={"target": "int8", "age_approx": "int8"})
+    metadata = pd.read_csv(METADATA_PATH, dtype={"target": "int8", "age_approx": "Int8"})
     return metadata[
         [
             "isic_id",
@@ -151,8 +174,8 @@ def upsample_metadata(metadata: pd.DataFrame, upsample_factor: int) -> pd.DataFr
     """Upsample the positive samples in the metadata by the upsample_factor"""
     metadata["upsampled"] = 0
     positive_samples = metadata[metadata["target"] == 1]
-    positive_samples["upsamples"] = 1
-    for i in range(upsample_factor):
+    positive_samples["upsampled"] = 1
+    for _ in range(upsample_factor):
         metadata = pd.concat([metadata, positive_samples])
     return metadata
 
