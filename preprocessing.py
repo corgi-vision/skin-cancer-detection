@@ -101,15 +101,49 @@ class SkinCancerDataset(PyDataset):
         return X, batch_y, self.weight_mapper(batch_y)
         
 
+class SkinCancerReconstructionDataset(PyDataset):
+    """Generator for dynamically loading the dataset for training an autoencoder
+    
+    The target in this dataset will be the images themself, meaning
+    that the __getitem__ method returns a batch of images two times
+    in a tuple
+    """
+    
+    def __init__(self, filepath: dict, batch_size:int, **kwargs):
+        super().__init__(**kwargs)
+        self.x = filepath
+        self.batch_size = batch_size
 
-def create_dataset(metadata, batch_size:int=50) -> SkinCancerDataset:
+    def __len__(self) -> int:
+        # Number of batches
+        return math.ceil(len(self.x) / self.batch_size)
+
+    def _load_image_batch(self, batch: list[str]) -> np.ndarray:
+        X = []
+        for filepath in batch:
+            image = Image.open(filepath).resize(MOST_COMMON_SHAPE)
+            np_scaled = np.array(image) / 255
+            X.append(np_scaled)
+            image.close()
+        return np.array(X)
+
+    def __getitem__(self, idx:int) -> np.ndarray:
+        start_idx = self.batch_size * idx
+        end_idx = min(self.batch_size + start_idx, len(self.x))
+
+        batch_x = self.x[start_idx:end_idx]
+        X = self._load_image_batch(batch_x)
+        return X, X
+
+
+def create_dataset(metadata:pd.DataFrame, batch_size:int=50) -> SkinCancerDataset:
     """Creates a SkinCancerDataset from the given metadata
     
     Args:
         metadata (pd.DataFrame): Corresponding metadata for the images to be loaded
 
     Returns:
-        SkinCancerDataset: A dataset generator for the images in the metadata
+        SkinCancerDataset: A dataset generator that yields (image, label, class_weigth) batches from the metadata
     """
     # Extend the id to the complete path
     metadata["filepath"] = metadata["isic_id"].apply(lambda id: str(TRAIN_IMAGES_PATH / (id + ".jpg")))
@@ -118,6 +152,19 @@ def create_dataset(metadata, batch_size:int=50) -> SkinCancerDataset:
 
     file_info, labels = shuffle(file_info, labels)
     return SkinCancerDataset(file_info, labels, batch_size)
+
+
+def create_reconstruction_dataset(metadata:pd.DataFrame, batch_size:int=50) -> SkinCancerReconstructionDataset:
+    """Creates a SkinCancerReconstructionDataset from the given metadata
+    
+    Args:
+        metadata (pd.DataFrame): Corresponding metadata for the images to be loaded
+
+    Returns:
+        SkinCancerReconstructionDataset: A dataset generator that yields batches of (image, image) from the metadata
+    """
+    filepath = metadata["isic_id"].apply(lambda id: str(TRAIN_IMAGES_PATH / (id + ".jpg"))).to_list()
+    return SkinCancerReconstructionDataset(filepath, batch_size)
 
 
 def load_prepared_datasets(load_size:float=1) -> tuple[Any]:
