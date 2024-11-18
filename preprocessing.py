@@ -9,13 +9,14 @@ from __future__ import annotations
 import logging
 import math
 import random
+import zipfile
 from pathlib import Path
 from typing import Any
 
+import gdown
 import numpy as np
 import pandas as pd
-from PIL import Image
-from PIL import ImageOps
+from PIL import Image, ImageOps
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
@@ -31,6 +32,16 @@ TRAIN_IMAGES_PATH = DATASET_HOME / "train-image" / "image"
 METADATA_PATH = DATASET_HOME / "train-metadata.csv"
 
 MOST_COMMON_SHAPE = (133,133)
+
+
+def download_data():
+    """Utility function to download the raw dataset"""
+    if(not Path("data").exists()):
+        # extract zip to the data dir
+        gdown.download("https://drive.google.com/uc?id=13z3O9BI082DFGs8aSaCAzWDbYCs_ZLxT", "resources.zip", quiet=False)
+        with zipfile.ZipFile("resources.zip", 'r') as zip_ref:
+            zip_ref.extractall("data")
+
 
 # List of functions to augment images
 image_augmenters = [
