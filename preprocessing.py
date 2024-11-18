@@ -26,7 +26,7 @@ from tensorflow.keras.utils import PyDataset
 logger = logging.getLogger()
 logger.setLevel("DEBUG")
 
-DATASET_HOME = Path.cwd().parent /  "data"
+DATASET_HOME = Path.cwd() /  "data"
 TRAIN_IMAGES_PATH = DATASET_HOME / "train-image" / "image"
 METADATA_PATH = DATASET_HOME / "train-metadata.csv"
 
@@ -136,7 +136,7 @@ class SkinCancerReconstructionDataset(PyDataset):
         return X, X
 
 
-def create_dataset(metadata:pd.DataFrame, batch_size:int=50) -> SkinCancerDataset:
+def create_dataset(metadata:pd.DataFrame, batch_size:int=50, workers:int=6) -> SkinCancerDataset:
     """Creates a SkinCancerDataset from the given metadata
     
     Args:
@@ -151,10 +151,10 @@ def create_dataset(metadata:pd.DataFrame, batch_size:int=50) -> SkinCancerDatase
     labels = metadata["target"].to_numpy()
 
     file_info, labels = shuffle(file_info, labels)
-    return SkinCancerDataset(file_info, labels, batch_size)
+    return SkinCancerDataset(file_info, labels, batch_size, workers=workers, use_multiprocessing=True)
 
 
-def create_reconstruction_dataset(metadata:pd.DataFrame, batch_size:int=50) -> SkinCancerReconstructionDataset:
+def create_reconstruction_dataset(metadata:pd.DataFrame, batch_size:int=50, workers:int=6) -> SkinCancerReconstructionDataset:
     """Creates a SkinCancerReconstructionDataset from the given metadata
     
     Args:
@@ -164,7 +164,7 @@ def create_reconstruction_dataset(metadata:pd.DataFrame, batch_size:int=50) -> S
         SkinCancerReconstructionDataset: A dataset generator that yields batches of (image, image) from the metadata
     """
     filepath = metadata["isic_id"].apply(lambda id: str(TRAIN_IMAGES_PATH / (id + ".jpg"))).to_list()
-    return SkinCancerReconstructionDataset(filepath, batch_size)
+    return SkinCancerReconstructionDataset(filepath, batch_size, workers=workers, use_multiprocessing=True)
 
 
 def load_prepared_datasets(load_size:float=1) -> tuple[Any]:
