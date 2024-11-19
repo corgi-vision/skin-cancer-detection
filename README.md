@@ -49,7 +49,7 @@ With the encoder we are able to create an embedding, we can concatenate the meta
 the images and the metadata as its input.
 
 
-#### ResNet
+#### Inception-ResNet
 See [training_resnet.ipynb](training_resnet.ipynb) <br>
 In this notebook, we are utilizing transfer learning with a pretrained Inception-ResNet model, which is an extension of the Inception family of architectures incorporating residual connections. 
 
