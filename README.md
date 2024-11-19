@@ -51,8 +51,7 @@ the images and the metadata as its input.
 
 #### ResNet
 See [training_resnet.ipynb](training_resnet.ipynb) <br>
-In this notebook we're using transfer learning with a pretrained ResNet architecure and appending additional layers to it. Most of the pretrained layers remain frozen for the
-training.
+In this notebook, we are utilizing transfer learning with a pretrained Inception-ResNet model, which is an extension of the Inception family of architectures incorporating residual connections. 
 
-
-Eventually the evaluation of both architectures will be compared against each other, and we can conclude which approach fits the dataset and the task best.
+Additional layers are appended to the pretrained model, with most of the pretrained layers remaining frozen during training.
+Finally, we will compare the evaluation results of both architectures to determine which approach best suits the dataset and task.
