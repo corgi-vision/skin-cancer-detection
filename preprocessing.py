@@ -202,9 +202,11 @@ def load_prepared_datasets(load_size:float=1) -> tuple[Any]:
     return X, metadata, Y, pipeline
 
 
-def load_metadata() -> pd.DataFrame:
+def load_metadata(sample_fraction: float = 1.0) -> pd.DataFrame:
     """Load metadata from csv and select relevant columns"""
     metadata = pd.read_csv(METADATA_PATH, dtype={"target": "int8", "age_approx": "Int8"})
+    if sample_fraction < 1.0:
+        metadata = metadata.sample(frac=sample_fraction, random_state=42)
     return metadata[
         [
             "isic_id",
