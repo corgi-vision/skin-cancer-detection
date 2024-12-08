@@ -110,7 +110,7 @@ class SkinCancerDataset(PyDataset):
 
     def __getitem__(self, idx: int) -> np.ndarray:
         start_idx = self.batch_size * idx
-        end_idx = min(self.batch_size + start_idx, len(self.y))
+        end_idx = min(self.batch_size + start_idx, len(self.x))
 
         batch_x = self.x[start_idx:end_idx]
         batch_y = self.y[start_idx:end_idx]
@@ -122,7 +122,7 @@ class SkinCancerDataset(PyDataset):
 class SkinCancerConcatDataset(PyDataset):
     """Generator for dynamically loading the dataset"""
 
-    def __init__(self, file_info: dict, labels:int,metadata, batch_size:int, **kwargs):
+    def __init__(self, file_info: dict, metadata, labels:int, batch_size:int, **kwargs):
         super().__init__(**kwargs)
         self.x = [file_info,metadata]
         self.y = labels
@@ -163,14 +163,18 @@ class SkinCancerConcatDataset(PyDataset):
 
     def __getitem__(self, idx: int) -> np.ndarray:
         start_idx = self.batch_size * idx
-        end_idx = min(self.batch_size + start_idx, len(self.x))
+        end_idx = min(self.batch_size + start_idx, len(self.y))
 
         batch_image = self.x[0][start_idx:end_idx]
+        batch_image = self._load_image_batch(batch_image)
         batch_metadata = self.x[1][start_idx:end_idx]
         batch_y = self.y[start_idx:end_idx]
 
-        X = [self._load_image_batch(batch_image),batch_metadata]
-        return X, batch_y, self.weight_mapper(batch_y)
+      
+        
+        X = (batch_image,batch_metadata)
+        #X = self._load_image_batch(batch_x)
+        return (batch_image,batch_metadata), batch_y, self.weight_mapper(batch_y)
         
 
 class SkinCancerReconstructionDataset(PyDataset):
@@ -278,5 +282,3 @@ class SkinCancerEncodedDataset(PyDataset):
         # Encode the image and concatenate with metadata
         encoded_image = Flatten()(self.model.encoder(np.array(X)))
         return np.concatenate([encoded_image, batch_metadata], axis=1)
-
-
