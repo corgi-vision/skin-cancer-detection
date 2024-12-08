@@ -17,30 +17,7 @@ In this project, we will develop image-based algorithms to identify histological
 The scripts for loading, visualizing and preprocessing the data are in the following notebook: [explore.ipynb](explore.ipynb)
 
 The preprocessing pipeline has been exported to [preprocessing.py](preprocessing.py) and augmented with the following functionality:
-
-**Dynamic data loading**
-
-The dataset in processed for is too big to fit into memory *133 * 133 * 3 * float32*, even if we would use a data type with smaller precision. Our solution is to use tf.keras.utils.PyDataset as a base class for our dataset, and let it handle the dynamic loading of the data. The `create_dataset()` utility function uses this class to create a dataset object from the metadata that it receives.
-The other dataset generator is the `SkinCancerReconstructionDataset` which generates batches where the taget is the same as the input. This dataset is used for training an autoencoder. It has a utility function as well: `create_reconstruction_dataset()`.
-
-**Balancing the class samples**
-
-Positive samples are heavily under-represented, which needs to be balanced out. We use the following techniques to compensate:
-* **Upsampling**<br>
-    Datapoints which belong to the positive samples are added to the dataset multiple times. This is indicated by the `upscale_factor` <br>
-    parameter when calling the `upscale_metata()` method.
-* **Data augmenting**<br>
-    To make the upsampled images more unique, some image augmentation techniques are applied. In particular horizontal and vertical mirroring <br>
-    and cropping then rescaling the images. Either one or two methods are applied randomly.
-* **Sample weights**<br>
-    For each sample the loss function is evaluated using a corresponding weight, <br>
-    which is higher for the positive samples. We use to following formula: $c_d / (2 * c_s)$, <br>
-    where $c_d$ is the count of all samples and $c_s$ is the count of samples for a given class of labels.
-
-
-### Model training
-Multiple architectures are created, trained and evaluated in order to explore different possibilities and find the best results.
-
+[data_loading.py](data_loading.py) contains the generator classes to dynamically load the dataset.
 
 #### Autoencoder
 See [training_autoencoder.ipynb](training_autoencoder.ipynb) <br>
