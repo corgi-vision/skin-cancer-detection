@@ -110,12 +110,66 @@ class SkinCancerDataset(PyDataset):
 
     def __getitem__(self, idx: int) -> np.ndarray:
         start_idx = self.batch_size * idx
-        end_idx = min(self.batch_size + start_idx, len(self.x))
+        end_idx = min(self.batch_size + start_idx, len(self.y))
 
         batch_x = self.x[start_idx:end_idx]
         batch_y = self.y[start_idx:end_idx]
 
         X = self._load_image_batch(batch_x)
+        return X, batch_y, self.weight_mapper(batch_y)
+    
+
+class SkinCancerConcatDataset(PyDataset):
+    """Generator for dynamically loading the dataset"""
+
+    def __init__(self, file_info: dict, labels:int,metadata, batch_size:int, **kwargs):
+        super().__init__(**kwargs)
+        self.x = [file_info,metadata]
+        self.y = labels
+        self.batch_size = batch_size
+        self.class_weights = self.calculate_class_weights()
+        self.weight_mapper = self.create_weight_mapper()
+
+    def calculate_class_weights(self) -> dict[int,int]:
+        """Create a dictionary for the class weights"""
+        half_count = len(self.y) / 2
+        positive_samples = self.y.sum()
+        negative_samples = len(self.y) - positive_samples
+        return {
+            0: half_count / negative_samples,
+            1: half_count / positive_samples
+        }
+    
+    def create_weight_mapper(self) -> np.ndarray:
+        """Create a mapper that returns the weight corresponding to the given label"""
+        return np.vectorize(self.class_weights.get, otypes=[float])
+
+    def __len__(self) -> int:
+        # Number of batches
+        return math.ceil(len(self.y) / self.batch_size)
+
+    def _load_image_batch(self, batch: list[str]) -> np.ndarray:
+        X = []
+        for file_info in batch:
+            path = file_info["filepath"]
+            upsampled = file_info["upsampled"]
+            image = Image.open(path).resize(MOST_COMMON_SHAPE)
+            if upsampled:
+                image = _augment_image(image)
+            np_scaled = np.array(image) / 255
+            X.append(np_scaled)
+            image.close()
+        return np.array(X)
+
+    def __getitem__(self, idx: int) -> np.ndarray:
+        start_idx = self.batch_size * idx
+        end_idx = min(self.batch_size + start_idx, len(self.x))
+
+        batch_image = self.x[0][start_idx:end_idx]
+        batch_metadata = self.x[1][start_idx:end_idx]
+        batch_y = self.y[start_idx:end_idx]
+
+        X = [self._load_image_batch(batch_image),batch_metadata]
         return X, batch_y, self.weight_mapper(batch_y)
         
 
