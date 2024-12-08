@@ -7,22 +7,21 @@ that was developed in the explore.ipynb notebook.
 from __future__ import annotations
 
 import logging
-import math
-import random
 import zipfile
 from pathlib import Path
 from typing import Any
 
+from data_loading import SkinCancerDataset, SkinCancerReconstructionDataset, SkinCancerEncodedDataset
+
 import gdown
 import numpy as np
 import pandas as pd
-from PIL import Image, ImageOps
+from PIL import Image
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder, StandardScaler
 from sklearn.utils import shuffle
-from tensorflow.keras.utils import PyDataset
 
 logger = logging.getLogger()
 logger.setLevel("DEBUG")
@@ -31,7 +30,6 @@ DATASET_HOME = Path.cwd() /  "data"
 TRAIN_IMAGES_PATH = DATASET_HOME / "train-image" / "image"
 METADATA_PATH = DATASET_HOME / "train-metadata.csv"
 
-MOST_COMMON_SHAPE = (133,133)
 
 
 def download_data():
@@ -41,110 +39,6 @@ def download_data():
         gdown.download("https://drive.google.com/uc?id=13z3O9BI082DFGs8aSaCAzWDbYCs_ZLxT", "resources.zip", quiet=False)
         with zipfile.ZipFile("resources.zip", 'r') as zip_ref:
             zip_ref.extractall("data")
-
-
-# List of functions to augment images
-image_augmenters = [
-    ImageOps.flip,
-    ImageOps.mirror,
-    lambda image: image.crop((10, 10,123,123)).resize(MOST_COMMON_SHAPE)
-]
-
-
-class SkinCancerDataset(PyDataset):
-    """Generator for dynamically loading the dataset"""
-
-    def __init__(self, file_info: dict, labels:int, batch_size:int, **kwargs):
-        super().__init__(**kwargs)
-        self.x = file_info
-        self.y = labels
-        self.batch_size = batch_size
-        self.class_weights = self.calculate_class_weights()
-        self.weight_mapper = self.create_weight_mapper()
-
-    def calculate_class_weights(self) -> dict[int,int]:
-        """Create a dictionary for the class weights"""
-        half_count = len(self.y) / 2
-        positive_samples = self.y.sum()
-        negative_samples = len(self.y) - positive_samples
-        return {
-            0: half_count / negative_samples,
-            1: half_count / positive_samples
-        }
-    
-    def create_weight_mapper(self) -> np.ndarray:
-        """Create a mapper that returns the weight corresponding to the given label"""
-        return np.vectorize(self.class_weights.get, otypes=[float])
-
-    def __len__(self) -> int:
-        # Number of batches
-        return math.ceil(len(self.y) / self.batch_size)
-
-    def _load_image_batch(self, batch: list[str]) -> np.ndarray:
-        X = []
-        for file_info in batch:
-            path = file_info["filepath"]
-            upsampled = file_info["upsampled"]
-            image = Image.open(path).resize(MOST_COMMON_SHAPE)
-            if upsampled:
-                image = self._augment_image(image)
-            np_scaled = np.array(image) / 255
-            X.append(np_scaled)
-            image.close()
-        return np.array(X)
-    
-    def _augment_image(self, image: Image):
-        """Applies either one or two transformations from image_augmenters"""
-        nb_transforms = random.randint(1,2)
-        rand_indices = random.sample(range(0, len(image_augmenters) - 1), nb_transforms)
-        for idx in rand_indices:
-            image = image_augmenters[idx](image)
-        return image
-
-    def __getitem__(self, idx: int) -> np.ndarray:
-        start_idx = self.batch_size * idx
-        end_idx = min(self.batch_size + start_idx, len(self.x))
-
-        batch_x = self.x[start_idx:end_idx]
-        batch_y = self.y[start_idx:end_idx]
-
-        X = self._load_image_batch(batch_x)
-        return X, batch_y, self.weight_mapper(batch_y)
-        
-
-class SkinCancerReconstructionDataset(PyDataset):
-    """Generator for dynamically loading the dataset for training an autoencoder
-    
-    The target in this dataset will be the images themself, meaning
-    that the __getitem__ method returns a batch of images two times
-    in a tuple
-    """
-    
-    def __init__(self, filepath: dict, batch_size:int, **kwargs):
-        super().__init__(**kwargs)
-        self.x = filepath
-        self.batch_size = batch_size
-
-    def __len__(self) -> int:
-        # Number of batches
-        return math.ceil(len(self.x) / self.batch_size)
-
-    def _load_image_batch(self, batch: list[str]) -> np.ndarray:
-        X = []
-        for filepath in batch:
-            image = Image.open(filepath).resize(MOST_COMMON_SHAPE)
-            np_scaled = np.array(image) / 255
-            X.append(np_scaled)
-            image.close()
-        return np.array(X)
-
-    def __getitem__(self, idx:int) -> np.ndarray:
-        start_idx = self.batch_size * idx
-        end_idx = min(self.batch_size + start_idx, len(self.x))
-
-        batch_x = self.x[start_idx:end_idx]
-        X = self._load_image_batch(batch_x)
-        return X, X
 
 
 def create_dataset(metadata:pd.DataFrame, batch_size:int=50, workers:int=6) -> SkinCancerDataset:
@@ -176,6 +70,25 @@ def create_reconstruction_dataset(metadata:pd.DataFrame, batch_size:int=50, work
     """
     filepath = metadata["isic_id"].apply(lambda id: str(TRAIN_IMAGES_PATH / (id + ".jpg"))).to_list()
     return SkinCancerReconstructionDataset(filepath, batch_size, workers=workers, use_multiprocessing=True)
+
+
+def create_encoded_dataset(metadata:pd.DataFrame, encoder:dict, batch_size:int=50, workers:int=6) -> SkinCancerEncodedDataset:
+    """Creates a SkinCancerEncodedDataset from the given metadata
+    
+    Args:
+        metadata (pd.DataFrame): Corresponding metadata for the images to be loaded
+        encoder (dict): Dictionary, that has a key for the model's name and one for the artifact
+    
+    Returns:
+        SkinCancerEncodedDataset: A dataset generator that yields (flattened image + metadata, label, weight)
+    """
+
+    metadata["filepath"] = metadata["isic_id"].apply(lambda id: str(TRAIN_IMAGES_PATH / (id + ".jpg")))
+    file_info = metadata[["filepath", "upsampled"]].to_dict(orient="records")
+    labels = metadata["target"].to_numpy()
+    processed_metadata, pipeline = _preprocess_metadata(metadata)   # TODO: save pipeline somehow
+    return SkinCancerEncodedDataset(processed_metadata, file_info, labels, encoder, batch_size)
+
 
 
 def load_prepared_datasets(load_size:float=1) -> tuple[Any]:
@@ -255,7 +168,7 @@ def _load_images(metadata:pd.DataFrame, load_size:float=1) -> tuple[Any]:
 
         if file_path.exists():
             image = Image.open(file_path)
-            image.thumbnail(MOST_COMMON_SHAPE)
+            image.thumbnail((133,133))
             np_image = np.array(image) / 255
             X.append(np_image)
             image.close()
