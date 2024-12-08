@@ -1,4 +1,4 @@
-# Skin cancer detection with deep neural network
+# Skin cancer detection with deep neural networks
 
 ## CorgiVision group project
 
@@ -14,16 +14,16 @@ In this project, we will develop image-based algorithms to identify histological
 
 ### Data preparation
 
-The scripts for loading, visualizing and preprocessing the data are in the following notebook: [explore.ipynb](explore.ipynb)
+* [explore.ipynb](explore.ipynb) The scripts for loading, visualizing and preprocessing the data
 
-The preprocessing pipeline has been exported to [preprocessing.py](preprocessing.py) and augmented with the following functionality:
-[data_loading.py](data_loading.py) contains the generator classes to dynamically load the dataset.
+* [preprocessing.py](preprocessing.py) The preprocessing pipeline has been exported here to be easily used in training notebooks
+
+* [data_loading.py](data_loading.py) Contains the generator classes to dynamically load the dataset
 
 #### Autoencoder
 See [training_autoencoder.ipynb](training_autoencoder.ipynb) <br>
 In this notebook an autoencoder is trained using the `SkinCancerReconstructionDataset` generator class, and as a result we obtain an encoder and a decoder for the images.
-With the encoder we are able to create an embedding, we can concatenate the metadata to. With this concatenated dataset, we will train another model that receives both
-the images and the metadata as its input.
+With the encoder we are able to create an embedding, we can concatenate the metadata to. With this concatenated dataset, we train another model that receives both the encoded images and the metadata as its input, using the `SkinCancerEncoderDataset` generator class.
 
 
 #### Inception-ResNet
