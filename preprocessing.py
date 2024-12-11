@@ -11,7 +11,7 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
-from data_loading import SkinCancerDataset, SkinCancerReconstructionDataset, SkinCancerEncodedDataset
+from data_loading import SkinCancerDataset, SkinCancerReconstructionDataset, SkinCancerEncodedDataset, SkinCancerConcatDataset
 
 import gdown
 import numpy as np
@@ -34,11 +34,11 @@ METADATA_PATH = DATASET_HOME / "train-metadata.csv"
 
 def download_data():
     """Utility function to download the raw dataset"""
-    if(not Path("data").exists()):
+    if(not Path(DATASET_HOME).exists()):
         # extract zip to the data dir
         gdown.download("https://drive.google.com/uc?id=13z3O9BI082DFGs8aSaCAzWDbYCs_ZLxT", "resources.zip", quiet=False)
         with zipfile.ZipFile("resources.zip", 'r') as zip_ref:
-            zip_ref.extractall("data")
+            zip_ref.extractall(DATASET_HOME)
 
 
 def create_dataset(metadata:pd.DataFrame, batch_size:int=50, workers:int=6) -> SkinCancerDataset:
@@ -57,6 +57,22 @@ def create_dataset(metadata:pd.DataFrame, batch_size:int=50, workers:int=6) -> S
 
     file_info, labels = shuffle(file_info, labels)
     return SkinCancerDataset(file_info, labels, batch_size, workers=workers, use_multiprocessing=True)
+
+def create_concat_dataset(metadata:pd.DataFrame, preproc_meta, batch_size:int=50, workers:int=6) -> SkinCancerDataset:
+    """Creates a SkinCancerDataset from the given metadata
+    
+    Args:
+        metadata (pd.DataFrame): Corresponding metadata for the images to be loaded
+
+    Returns:
+        SkinCancerDataset: A dataset generator that yields (image, label, class_weigth) batches from the metadata
+    """
+    # Extend the id to the complete path
+    metadata["filepath"] = metadata["isic_id"].apply(lambda id: str(TRAIN_IMAGES_PATH / (id + ".jpg")))
+    file_info = metadata[["filepath", "upsampled"]].to_dict(orient="records")
+    labels = metadata["target"].to_numpy()
+    file_info, preproc_meta, labels = shuffle(file_info, preproc_meta, labels)
+    return SkinCancerConcatDataset(file_info, preproc_meta, labels, batch_size, workers=workers, use_multiprocessing=True)
 
 
 def create_reconstruction_dataset(metadata:pd.DataFrame, batch_size:int=50, workers:int=6) -> SkinCancerReconstructionDataset:
@@ -114,6 +130,7 @@ def load_prepared_datasets(load_size:float=1) -> tuple[Any]:
 
     return X, metadata, Y, pipeline
 
+import os
 
 def load_metadata(sample_fraction: float = 1.0) -> pd.DataFrame:
     """Load metadata from csv and select relevant columns"""
@@ -228,4 +245,3 @@ def _preprocess_metadata(metadata:pd.DataFrame) -> tuple[Any]:
 
     metadata_processed = preprocessing_pipeline.fit_transform(metadata)
     return metadata_processed, preprocessing_pipeline
-
