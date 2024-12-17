@@ -32,3 +32,7 @@ In this notebook, we are utilizing transfer learning with a pretrained Inception
 
 Additional layers are appended to the pretrained model, with most of the pretrained layers remaining frozen during training.
 Finally, we will compare the evaluation results of both architectures to determine which approach best suits the dataset and task.
+
+#### Documentation and presentation
+For the documenatiation we created a pdf fuke which you can find here: [Documentation.pdf](Documentation.pdf)<br>
+We also exported the presentation in pdf: [Presentation_EN.pdf](Presentation_EN.pdf)
